@@ -63,10 +63,7 @@ var listCmd = &cobra.Command{
 					tagsStr = "-"
 				}
 
-				priority := task.Priority
-				if priority == "" {
-					priority = "-"
-				}
+				priority := fmt.Sprintf("%d", task.Priority)
 
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 					topicDisplay,
@@ -91,18 +88,8 @@ func sortTasks(tasks []*TaskWithPath, sortBy string) {
 	sort.Slice(tasks, func(i, j int) bool {
 		switch sortBy {
 		case "priority":
-			// Handle empty priorities
-			pi, pj := tasks[i].Task.Priority, tasks[j].Task.Priority
-			if pi == "" && pj == "" {
-				return false
-			}
-			if pi == "" {
-				return false
-			}
-			if pj == "" {
-				return true
-			}
-			return pi < pj
+			// Lower numbers = higher priority
+			return tasks[i].Task.Priority < tasks[j].Task.Priority
 		case "title":
 			return tasks[i].Task.Title < tasks[j].Task.Title
 		case "status":

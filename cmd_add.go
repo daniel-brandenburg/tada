@@ -17,7 +17,7 @@ var addCmd = &cobra.Command{
 		title := strings.Join(args, " ")
 
 		description, _ := cmd.Flags().GetString("description")
-		priority, _ := cmd.Flags().GetString("priority")
+		priority, _ := cmd.Flags().GetInt("priority")
 		tags, _ := cmd.Flags().GetStringSlice("tags")
 
 		// Parse topic from title if contains "/"
@@ -57,6 +57,6 @@ var addCmd = &cobra.Command{
 
 func init() {
 	addCmd.Flags().StringP("description", "d", "", "Task description")
-	addCmd.Flags().StringP("priority", "p", "", "Task priority (p0, p1, p2, ...)")
+	addCmd.Flags().IntP("priority", "p", 3, "Task priority (0, 1, 2, ...)")
 	addCmd.Flags().StringSliceP("tags", "t", []string{}, "Task tags")
 }

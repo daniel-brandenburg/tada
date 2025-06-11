@@ -17,7 +17,7 @@ const (
 type Task struct {
 	Title       string     `yaml:"title"`
 	Description string     `yaml:"description,omitempty"`
-	Priority    string     `yaml:"priority,omitempty"`
+	Priority    int        `yaml:"priority,omitempty"`
 	Status      TaskStatus `yaml:"status"`
 	Tags        []string   `yaml:"tags,omitempty"`
 	CreatedAt   time.Time  `yaml:"created_at"`

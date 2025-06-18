@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -15,6 +16,7 @@ type viewMode int
 const (
 	listView viewMode = iota
 	editView
+	addView
 )
 
 type model struct {
@@ -84,6 +86,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.mode == editView {
 			return m.updateEditView(msg)
+		} else if m.mode == addView {
+			return m.updateAddView(msg)
 		}
 		return m.updateListView(msg)
 
@@ -123,6 +127,9 @@ func (m model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.initForm()
 			}
 		}
+	case "a":
+		m.mode = addView
+		m.initAddForm()
 	case "r":
 		return m, loadTasks
 	}
@@ -141,6 +148,42 @@ func (m model) updateEditView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if m.editForm.field == 5 { // Save
 			return m.saveTask()
+		} else if m.editForm.field == 6 { // Cancel
+			m.mode = listView
+			return m, nil
+		}
+	case "left", "h":
+		if m.editForm.field == 3 { // Status field
+			m.cycleStatus(-1)
+		}
+	case "right", "l":
+		if m.editForm.field == 3 { // Status field
+			m.cycleStatus(1)
+		}
+	case "backspace":
+		m.editText("")
+	case "space":
+		m.editText(" ")
+	default:
+		if len(msg.String()) == 1 {
+			m.editText(msg.String())
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateAddView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "esc":
+		m.mode = listView
+		return m, nil
+	case "tab":
+		m.editForm.field = (m.editForm.field + 1) % 7
+	case "shift+tab":
+		m.editForm.field = (m.editForm.field - 1 + 7) % 7
+	case "enter":
+		if m.editForm.field == 5 { // Save
+			return m.addTask()
 		} else if m.editForm.field == 6 { // Cancel
 			m.mode = listView
 			return m, nil
@@ -219,6 +262,17 @@ func (m *model) initForm() {
 	}
 }
 
+func (m *model) initAddForm() {
+	m.editForm = form{
+		field:    0,
+		title:    "",
+		desc:     "",
+		priority: "3",
+		status:   StatusTodo,
+		tags:     "",
+	}
+}
+
 func (m model) saveTask() (tea.Model, tea.Cmd) {
 	task := m.editTask.Task
 	task.Title = m.editForm.title
@@ -245,6 +299,55 @@ func (m model) saveTask() (tea.Model, tea.Cmd) {
 
 	if err := os.WriteFile(m.editTask.FilePath, []byte(content), 0644); err != nil {
 		m.err = fmt.Errorf("failed to save: %w", err)
+	}
+
+	m.mode = listView
+	return m, loadTasks
+}
+
+func (m model) addTask() (tea.Model, tea.Cmd) {
+	if m.editForm.title == "" {
+		m.err = fmt.Errorf("title cannot be empty")
+		return m, nil
+	}
+	title := m.editForm.title
+	var topic, taskTitle string
+	if strings.Contains(title, "/") {
+		parts := strings.Split(title, "/")
+		if len(parts) >= 2 {
+			topic = filepath.Join(parts[:len(parts)-1]...)
+			taskTitle = parts[len(parts)-1]
+		} else {
+			taskTitle = title
+		}
+	} else {
+		taskTitle = title
+	}
+
+	// Create new task
+	task := &Task{
+		Title:       taskTitle,
+		Description: m.editForm.desc,
+		Status:      m.editForm.status,
+		Priority:    3, // default
+	}
+
+	if m.editForm.priority != "" {
+		fmt.Sscanf(m.editForm.priority, "%d", &task.Priority)
+	}
+
+	if m.editForm.tags != "" {
+		tags := strings.Split(m.editForm.tags, ",")
+		for i, tag := range tags {
+			tags[i] = strings.TrimSpace(tag)
+		}
+		task.Tags = tags
+	}
+
+	store := NewFileStore()
+	if err := store.SaveTask(topic, task); err != nil {
+		m.err = fmt.Errorf("Error adding task: %v\n", err)
+		return m, nil
 	}
 
 	m.mode = listView
@@ -320,16 +423,18 @@ func (m model) View() string {
 
 	if m.mode == editView {
 		return m.viewEdit()
+	} else if m.mode == addView {
+		return m.viewAdd()
 	}
 	return m.viewList()
 }
 
 func (m model) viewList() string {
 	s := "TADA - Todo Manager\n"
-	s += mutedStyle.Render("j/k: move • space: expand • enter: edit • r: refresh • q: quit") + "\n\n"
+	s += mutedStyle.Render("j/k: move • space: expand • enter: edit • a: add • r: refresh • q: quit") + "\n\n"
 
 	if len(m.items) == 0 {
-		return s + mutedStyle.Render("No tasks found. Use 'tada add \"task title\"' to create tasks.")
+		return s + mutedStyle.Render("No tasks found. Press 'a' to add a task.")
 	}
 
 	for i, item := range m.items {
@@ -405,6 +510,61 @@ func (m model) viewEdit() string {
 	}
 
 	s += save + " " + cancel
+
+	return s
+}
+
+func (m model) viewAdd() string {
+	s := "Add New Task\n"
+	s += mutedStyle.Render("tab: next field • enter: add/cancel • esc: back") + "\n\n"
+
+	fields := []struct {
+		label string
+		value string
+		help  string
+	}{
+		{"Title:", m.editForm.title, "(required)"},
+		{"Description:", m.editForm.desc, ""},
+		{"Priority:", m.editForm.priority, "(1-5, default 3)"},
+		{"Status:", string(m.editForm.status), "(h/l to change)"},
+		{"Tags:", m.editForm.tags, "(comma separated)"},
+	}
+
+	for i, field := range fields {
+		label := field.label
+		value := field.value
+
+		if i == m.editForm.field {
+			label = focusStyle.Render(label)
+			value += "█" // cursor
+		}
+
+		s += fmt.Sprintf("%s %s", label, value)
+		if field.help != "" {
+			s += " " + mutedStyle.Render(field.help)
+		}
+		s += "\n"
+	}
+
+	s += "\n"
+
+	// Buttons
+	add := "Add"
+	cancel := "Cancel"
+
+	if m.editForm.field == 5 {
+		add = focusStyle.Render("[" + add + "]")
+	} else {
+		add = "[" + add + "]"
+	}
+
+	if m.editForm.field == 6 {
+		cancel = focusStyle.Render("[" + cancel + "]")
+	} else {
+		cancel = "[" + cancel + "]"
+	}
+
+	s += add + " " + cancel
 
 	return s
 }

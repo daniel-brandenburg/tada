@@ -10,31 +10,28 @@ import (
 
 // TestRootCmd tests the root command
 func TestRootCmd(t *testing.T) {
-	// Create a buffer to capture output
 	var buf bytes.Buffer
 
-	// Create a root command for testing
+	testTadaDir, cleanup := setupTestEnv(t)
+	defer cleanup()
+	store := NewFileStore(testTadaDir)
+
 	rootCmd := &cobra.Command{
 		Use:   "tada",
 		Short: "A terminal-based todo application",
 		Long:  "Tada is a simple yet powerful todo application with both CLI and TUI interfaces",
 	}
 
-	// Add subcommands
-	rootCmd.AddCommand(addCmd, listCmd, completeCmd, tuiCmd)
+	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store), NewCompleteCmd(store), NewTuiCmd(store))
 
-	// Set output to our buffer
 	rootCmd.SetOut(&buf)
 	rootCmd.SetErr(&buf)
-
-	// Test the help command
 	rootCmd.SetArgs([]string{"--help"})
 	err := rootCmd.Execute()
 	if err != nil {
 		t.Errorf("Error executing root command: %v", err)
 	}
 
-	// Check if the output contains expected information
 	output := buf.String()
 	expectedPhrases := []string{
 		"A terminal-based todo application",
@@ -76,17 +73,19 @@ func TestMainFunction(t *testing.T) {
 		os.Stdout = oldStdout
 	}()
 
-	// Run main in a separate goroutine to capture exit
+	testTadaDir, cleanup := setupTestEnv(t)
+	defer cleanup()
+	store := NewFileStore(testTadaDir)
+
 	exitCh := make(chan int, 1)
 	go func() {
-		// This is a simplified version of main() that doesn't exit
 		var rootCmd = &cobra.Command{
 			Use:   "tada",
 			Short: "A terminal-based todo application",
 			Long:  "Tada is a simple yet powerful todo application with both CLI and TUI interfaces",
 		}
 
-		rootCmd.AddCommand(addCmd, listCmd, completeCmd, tuiCmd)
+		rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store), NewCompleteCmd(store), NewTuiCmd(store))
 
 		if err := rootCmd.Execute(); err != nil {
 			exitCh <- 1

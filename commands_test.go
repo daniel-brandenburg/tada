@@ -14,37 +14,26 @@ import (
 
 // Setup test environment
 func setupTestEnv(t *testing.T) (string, func()) {
-	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "tada-cmd-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-
-	// Create a custom path for testing
 	testTadaDir := filepath.Join(tempDir, ".tada")
-	
-	// Create a FileStore with custom path
-	fs := &FileStore{
-		basePath: testTadaDir,
-	}
-
-	// Create directories
+	fs := NewFileStore(testTadaDir)
 	if err := fs.ensureDirectories(); err != nil {
 		t.Fatalf("Failed to create test directories: %v", err)
 	}
-	
-	// Create cleanup function
 	cleanup := func() {
 		os.RemoveAll(tempDir)
 	}
-
-	return tempDir, cleanup
+	return testTadaDir, cleanup
 }
 
 // TestAddCmd tests the add command
 func TestAddCmd(t *testing.T) {
-	_, cleanup := setupTestEnv(t)
+	testTadaDir, cleanup := setupTestEnv(t)
 	defer cleanup()
+	store := NewFileStore(testTadaDir)
 
 	// Create a buffer to capture output
 	var buf bytes.Buffer
@@ -104,33 +93,19 @@ func TestAddCmd(t *testing.T) {
 			buf.Reset()
 
 			// Create a new command
-			cmd := &cobra.Command{
-				Use: "add",
-			}
-			cmd.Flags().StringP("description", "d", "", "")
-			cmd.Flags().IntP("priority", "p", 3, "")
-			cmd.Flags().StringSliceP("tags", "t", []string{}, "")
-
-			// Set flags
+			cmd := NewAddCmd(store)
 			for k, v := range tc.flags {
-				if k == "tags" {
-					cmd.Flags().Set(k, v)
-				} else if k == "priority" {
-					cmd.Flags().Set(k, v)
-				} else {
-					cmd.Flags().Set(k, v)
-				}
+				cmd.Flags().Set(k, v)
 			}
-
-			// Execute the command function
-			addCmd.Run(cmd, tc.args)
+			cmd.SetArgs(tc.args)
+			cmd.SetOut(&buf)
+			cmd.Execute()
 
 			// Flush stdout to our buffer
 			w.Close()
 			io.Copy(&buf, r)
 
 			// Check if task was created
-			store := NewFileStore()
 			tasks, err := store.LoadAllTasks()
 			if err != nil {
 				t.Fatalf("Failed to load tasks: %v", err)
@@ -158,11 +133,11 @@ func TestAddCmd(t *testing.T) {
 
 // TestListCmd tests the list command
 func TestListCmd(t *testing.T) {
-	_, cleanup := setupTestEnv(t)
+	testTadaDir, cleanup := setupTestEnv(t)
 	defer cleanup()
 
 	// Create some test tasks
-	store := NewFileStore()
+	store := NewFileStore(testTadaDir)
 	tasks := []*Task{
 		{
 			Title:       "Task 1",
@@ -259,7 +234,13 @@ func TestListCmd(t *testing.T) {
 			}
 
 			// Execute the command function
-			listCmd.Run(cmd, tc.args)
+			listCmd := NewListCmd(store)
+			listCmd.SetArgs(tc.args)
+			for k, v := range tc.flags {
+				listCmd.Flags().Set(k, v)
+			}
+			listCmd.SetOut(&buf)
+			listCmd.Execute()
 
 			// Flush stdout to our buffer
 			w.Close()
@@ -283,11 +264,11 @@ func TestListCmd(t *testing.T) {
 
 // TestCompleteCmd tests the complete command
 func TestCompleteCmd(t *testing.T) {
-	_, cleanup := setupTestEnv(t)
+	testTadaDir, cleanup := setupTestEnv(t)
 	defer cleanup()
 
 	// Create a test task
-	store := NewFileStore()
+	store := NewFileStore(testTadaDir)
 	task := &Task{
 		Title:       "Test Complete Task",
 		Description: "This is a task to test completion",
@@ -316,12 +297,10 @@ func TestCompleteCmd(t *testing.T) {
 	}()
 
 	// Test completing the task
-	cmd := &cobra.Command{
-		Use: "complete",
-	}
-
-	// Execute the command function
-	completeCmd.Run(cmd, []string{"Test Complete Task"})
+	cmd := NewCompleteCmd(store)
+	cmd.SetArgs([]string{"Test Complete Task"})
+	cmd.SetOut(&buf)
+	cmd.Execute()
 
 	// Flush stdout to our buffer
 	w.Close()
@@ -349,7 +328,7 @@ func TestCompleteCmd(t *testing.T) {
 	}
 
 	// Get a new store instance
-	store = NewFileStore()
+	store = NewFileStore(testTadaDir)
 	// Check archive directory
 	archiveFiles, err := os.ReadDir(filepath.Join(store.basePath, ArchiveDir))
 	if err != nil {
@@ -360,4 +339,3 @@ func TestCompleteCmd(t *testing.T) {
 		t.Errorf("Expected 1 file in archive directory, got %d", len(archiveFiles))
 	}
 }
-

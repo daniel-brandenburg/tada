@@ -21,9 +21,13 @@ type FileStore struct {
 	basePath string
 }
 
-func NewFileStore() *FileStore {
+func NewFileStore(basePath ...string) *FileStore {
+	path := TadaDir
+	if len(basePath) > 0 && basePath[0] != "" {
+		path = basePath[0]
+	}
 	return &FileStore{
-		basePath: TadaDir,
+		basePath: path,
 	}
 }
 
@@ -46,16 +50,24 @@ func (fs *FileStore) generateFileName(title string) string {
 	// Create slug from title
 	slug := strings.ToLower(title)
 	slug = strings.ReplaceAll(slug, " ", "-")
-	slug = strings.ReplaceAll(slug, "/", "-")
+	slug = strings.ReplaceAll(slug, "/", "") // Remove slashes entirely
 
 	// Remove special characters
 	var result strings.Builder
+	prevDash := false
 	for _, r := range slug {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
 			result.WriteRune(r)
-		}
+			prevDash = false
+		} else if r == '-' && !prevDash {
+			result.WriteRune(r)
+			prevDash = true
+		} // else skip
 	}
 	slug = result.String()
+
+	// Remove leading/trailing dashes
+	slug = strings.Trim(slug, "-")
 
 	// Add timestamp
 	timestamp := time.Now().Format("20060102-150405")

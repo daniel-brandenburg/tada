@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -31,13 +32,16 @@ func NewCompleteCmd(store *FileStore) *cobra.Command {
 			}
 
 			if err := store.CompleteTask(topic, title); err != nil {
-				fmt.Printf("Error completing task: %v\n", err)
+				styledErr := lipgloss.NewStyle().Foreground(cliError).Render(fmt.Sprintf("Error completing task: %v", err))
+				fmt.Fprintln(cmd.ErrOrStderr(), styledErr)
 				return
 			}
 
-			fmt.Printf("Task completed and archived: %s\n", title)
+			successStyle := lipgloss.NewStyle().Foreground(cliPrimary).Bold(true)
+			fmt.Fprintln(cmd.OutOrStdout(), successStyle.Render(fmt.Sprintf("Task completed and archived: %s", title)))
 			if topic != "" {
-				fmt.Printf("Topic: %s\n", topic)
+				topicStyle := lipgloss.NewStyle().Foreground(cliSecondary)
+				fmt.Fprintln(cmd.OutOrStdout(), topicStyle.Render(fmt.Sprintf("Topic: %s", topic)))
 			}
 		},
 	}

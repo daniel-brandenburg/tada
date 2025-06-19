@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/charmbracelet/fang"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +30,8 @@ func main() {
 	cwd, _ := os.Getwd()
 	tadaDir, err := findTadaDir(cwd)
 	if err != nil {
-		fmt.Println("No .tada folder found in this or any parent directory.")
+		styledErr := lipgloss.NewStyle().Foreground(cliError).Render("No .tada folder found in this or any parent directory.")
+		fmt.Fprintln(os.Stderr, styledErr)
 		os.Exit(1)
 	}
 	store := NewFileStore(tadaDir)
@@ -42,7 +44,7 @@ func main() {
 		},
 	}
 
-	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store), NewCompleteCmd(store), NewTuiCmd(store), NewEditCmd(store), NewDeleteCmd(store))
+	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store), NewCompleteCmd(store), NewTuiCmd(store), NewEditCmd(store), NewDeleteCmd(store), NewShowCmd(store), NewMoveCmd(store), NewCopyCmd(store), NewBulkCmd(store), NewConfigCmd())
 
 	if err := fang.Execute(context.TODO(), rootCmd); err != nil {
 		os.Exit(1)

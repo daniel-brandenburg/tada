@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"gopkg.in/yaml.v3"
 )
 
@@ -159,7 +160,8 @@ func (fs *FileStore) LoadAllTasks() (map[string][]*TaskWithPath, error) {
 		// Load task
 		task, err := fs.loadTaskFromFile(path)
 		if err != nil {
-			fmt.Printf("Warning: failed to load task from %s: %v\n", path, err)
+			styledWarn := lipgloss.NewStyle().Foreground(cliError).Render(fmt.Sprintf("Warning: failed to load task from %s: %v", path, err))
+			fmt.Fprintln(os.Stderr, styledWarn)
 			return nil
 		}
 

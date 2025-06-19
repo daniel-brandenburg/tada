@@ -731,66 +731,6 @@ func (m model) viewList() string {
 	return s
 }
 
-// Helper to render the list dimmed for popup overlay
-func (m model) renderListDimmed() string {
-	s := "TADA - Todo Manager\n"
-	s += mutedStyle.Render("j/k: move • space: expand • enter: edit • a: add • r: refresh • q: quit") + "\n\n"
-
-	if len(m.items) == 0 {
-		return s + mutedStyle.Render("No tasks found. Press 'a' to add a task.")
-	}
-
-	height := m.height
-	if height == 0 {
-		height = 24 // fallback default
-	}
-	reserved := 4 // header + help + some padding
-	visibleLines := height - reserved
-	if visibleLines < 1 {
-		visibleLines = 1
-	}
-
-	start := 0
-	end := len(m.items)
-	if len(m.items) > visibleLines {
-		// Center selected if possible
-		start = m.selected - visibleLines/2
-		if start < 0 {
-			start = 0
-		}
-		end = start + visibleLines
-		if end > len(m.items) {
-			end = len(m.items)
-			start = end - visibleLines
-			if start < 0 {
-				start = 0
-			}
-		}
-	}
-
-	for i := start; i < end; i++ {
-		item := m.items[i]
-		line := item.text
-
-		if item.isTopic {
-			icon := "▶"
-			if m.expanded[item.topic] {
-				icon = "▼"
-			}
-			line = icon + " " + line
-			line = mutedStyle.Render(line)
-		}
-
-		if i == m.selected {
-			line = mutedStyle.Render(line)
-		}
-
-		s += line + "\n"
-	}
-
-	return s
-}
-
 func (m model) viewEdit() string {
 	s := "Edit Task\n"
 	s += mutedStyle.Render("tab: next field • enter: save/cancel • esc: back") + "\n\n"
@@ -904,6 +844,7 @@ func (m model) viewAdd() string {
 func RunTUI() {
 	p := tea.NewProgram(initialModel())
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error: %v", err)
+		styledErr := lipgloss.NewStyle().Foreground(cliError).Render(fmt.Sprintf("Error: %v", err))
+		fmt.Fprintln(os.Stderr, styledErr)
 	}
 }

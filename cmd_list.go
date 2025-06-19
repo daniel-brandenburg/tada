@@ -1,13 +1,17 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
 	"text/tabwriter"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/spf13/cobra"
 )
 
@@ -20,6 +24,8 @@ var (
 )
 
 func NewListCmd(store *FileStore) *cobra.Command {
+	var outputFormat string
+	var fuzzyFlag bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List tasks",
@@ -53,10 +59,23 @@ func NewListCmd(store *FileStore) *cobra.Command {
 				q := strings.ToLower(query)
 				for path, taskList := range tasks {
 					for _, task := range taskList {
-						if strings.Contains(strings.ToLower(task.Task.Title), q) ||
-							strings.Contains(strings.ToLower(task.Task.Description), q) ||
-							strings.Contains(strings.ToLower(strings.Join(task.Task.Tags, ",")), q) ||
-							strings.Contains(strings.ToLower(path), q) {
+						match := false
+						if fuzzyFlag {
+							if fuzzy.MatchFold(q, strings.ToLower(task.Task.Title)) ||
+								fuzzy.MatchFold(q, strings.ToLower(task.Task.Description)) ||
+								fuzzy.MatchFold(q, strings.ToLower(strings.Join(task.Task.Tags, ","))) ||
+								fuzzy.MatchFold(q, strings.ToLower(path)) {
+								match = true
+							}
+						} else {
+							if strings.Contains(strings.ToLower(task.Task.Title), q) ||
+								strings.Contains(strings.ToLower(task.Task.Description), q) ||
+								strings.Contains(strings.ToLower(strings.Join(task.Task.Tags, ",")), q) ||
+								strings.Contains(strings.ToLower(path), q) {
+								match = true
+							}
+						}
+						if match {
 							filtered[path] = append(filtered[path], task)
 						}
 					}
@@ -86,6 +105,18 @@ func NewListCmd(store *FileStore) *cobra.Command {
 						fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", id, titleStyle.Render(taskWithPath.Task.Title), statusStyle.Render(string(taskWithPath.Task.Status)))
 					}
 				}
+				return
+			}
+
+			if outputFormat == "json" {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				enc.Encode(tasks)
+				return
+			}
+			if outputFormat == "yaml" {
+				enc := yaml.NewEncoder(cmd.OutOrStdout())
+				enc.Encode(tasks)
 				return
 			}
 
@@ -133,6 +164,8 @@ func NewListCmd(store *FileStore) *cobra.Command {
 			w.Flush()
 		},
 	}
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "Output format: json, yaml, or pretty (default)")
+	cmd.Flags().BoolVar(&fuzzyFlag, "fuzzy", false, "Enable fuzzy search for --search")
 	cmd.Flags().StringP("status", "s", "", "Filter by status (todo, in-progress, done, cancelled, paused)")
 	cmd.Flags().String("sort", "created", "Sort by: created, priority, title, status")
 	cmd.Flags().Bool("simple", false, "Print simple output (id, title, status)")

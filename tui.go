@@ -142,6 +142,10 @@ func (m model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.searchQuery = ""
 		return m, nil
 	case "i":
+		if m.showDetails {
+			m.showDetails = false
+			return m, nil
+		}
 		m.showDetails = true
 		return m, nil
 	case "esc":
@@ -649,27 +653,6 @@ func (m model) View() string {
 }
 
 func (m model) viewList() string {
-	if m.showDetails && m.selected < len(m.items) && m.items[m.selected].task != nil {
-		task := m.items[m.selected].task.Task
-		s := "Task Details\n"
-		s += "Title: " + task.Title + "\n"
-		s += "Description: " + task.Description + "\n"
-		s += "Priority: " + fmt.Sprintf("%d", task.Priority) + "\n"
-		s += "Status: " + string(task.Status) + "\n"
-		s += "Tags: " + strings.Join(task.Tags, ", ") + "\n"
-		s += "(Press esc to close)\n"
-		return s
-	}
-	if m.searchMode {
-		s := "Search: " + m.searchQuery + "\n"
-		for _, item := range m.items {
-			if item.task != nil && strings.Contains(strings.ToLower(item.task.Task.Title), strings.ToLower(m.searchQuery)) {
-				s += item.text + "\n"
-			}
-		}
-		s += "(Press esc to exit search)\n"
-		return s
-	}
 	s := "TADA - Todo Manager\n"
 	s += mutedStyle.Render("j/k: move • space: expand • enter: edit • a: add • r: refresh • q: quit") + "\n\n"
 
@@ -720,6 +703,86 @@ func (m model) viewList() string {
 
 		if i == m.selected {
 			line = selectedStyle.Render(line)
+		}
+
+		s += line + "\n"
+
+		// Insert the popup directly below the selected item
+		if m.showDetails && i == m.selected && item.task != nil {
+			task := item.task.Task
+			detail := lipgloss.NewStyle().Bold(true).Foreground(accent).Render("Task Details") + "\n"
+			detail += focusStyle.Render("Title: ") + task.Title + "\n"
+			detail += focusStyle.Render("Description: ") + task.Description + "\n"
+			detail += focusStyle.Render("Priority: ") + fmt.Sprintf("%d", task.Priority) + "\n"
+			detail += focusStyle.Render("Status: ") + string(task.Status) + "\n"
+			detail += focusStyle.Render("Tags: ") + strings.Join(task.Tags, ", ") + "\n"
+			detail += mutedStyle.Render("(Press esc/i to close)")
+
+			popupStyle := lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(accent).
+				Background(lipgloss.Color("0"))
+			popup := popupStyle.Padding(1, 2).Width(50).Align(lipgloss.Left).Render(detail)
+
+			s += popup + "\n"
+		}
+	}
+
+	return s
+}
+
+// Helper to render the list dimmed for popup overlay
+func (m model) renderListDimmed() string {
+	s := "TADA - Todo Manager\n"
+	s += mutedStyle.Render("j/k: move • space: expand • enter: edit • a: add • r: refresh • q: quit") + "\n\n"
+
+	if len(m.items) == 0 {
+		return s + mutedStyle.Render("No tasks found. Press 'a' to add a task.")
+	}
+
+	height := m.height
+	if height == 0 {
+		height = 24 // fallback default
+	}
+	reserved := 4 // header + help + some padding
+	visibleLines := height - reserved
+	if visibleLines < 1 {
+		visibleLines = 1
+	}
+
+	start := 0
+	end := len(m.items)
+	if len(m.items) > visibleLines {
+		// Center selected if possible
+		start = m.selected - visibleLines/2
+		if start < 0 {
+			start = 0
+		}
+		end = start + visibleLines
+		if end > len(m.items) {
+			end = len(m.items)
+			start = end - visibleLines
+			if start < 0 {
+				start = 0
+			}
+		}
+	}
+
+	for i := start; i < end; i++ {
+		item := m.items[i]
+		line := item.text
+
+		if item.isTopic {
+			icon := "▶"
+			if m.expanded[item.topic] {
+				icon = "▼"
+			}
+			line = icon + " " + line
+			line = mutedStyle.Render(line)
+		}
+
+		if i == m.selected {
+			line = mutedStyle.Render(line)
 		}
 
 		s += line + "\n"

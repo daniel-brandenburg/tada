@@ -152,13 +152,33 @@ func (m model) updateEditView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = listView
 			return m, nil
 		}
-	case "left", "h":
-		if m.editForm.field == 3 { // Status field
+	case "left":
+		if m.editForm.field == 3 {
 			m.cycleStatus(-1)
+		} else if m.editForm.field == 2 {
+			m.cyclePriority(-1)
 		}
-	case "right", "l":
-		if m.editForm.field == 3 { // Status field
+	case "right":
+		if m.editForm.field == 3 {
 			m.cycleStatus(1)
+		} else if m.editForm.field == 2 {
+			m.cyclePriority(1)
+		}
+	case "h":
+		if m.editForm.field == 3 {
+			m.cycleStatus(-1)
+		} else if m.editForm.field == 2 {
+			m.cyclePriority(-1)
+		} else {
+			m.editText("h")
+		}
+	case "l":
+		if m.editForm.field == 3 {
+			m.cycleStatus(1)
+		} else if m.editForm.field == 2 {
+			m.cyclePriority(1)
+		} else {
+			m.editText("l")
 		}
 	case "backspace":
 		m.editText("")
@@ -188,13 +208,33 @@ func (m model) updateAddView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = listView
 			return m, nil
 		}
-	case "left", "h":
-		if m.editForm.field == 3 { // Status field
+	case "left":
+		if m.editForm.field == 3 {
 			m.cycleStatus(-1)
+		} else if m.editForm.field == 2 {
+			m.cyclePriority(-1)
 		}
-	case "right", "l":
-		if m.editForm.field == 3 { // Status field
+	case "right":
+		if m.editForm.field == 3 {
 			m.cycleStatus(1)
+		} else if m.editForm.field == 2 {
+			m.cyclePriority(1)
+		}
+	case "h":
+		if m.editForm.field == 3 {
+			m.cycleStatus(-1)
+		} else if m.editForm.field == 2 {
+			m.cyclePriority(-1)
+		} else {
+			m.editText("h")
+		}
+	case "l":
+		if m.editForm.field == 3 {
+			m.cycleStatus(1)
+		} else if m.editForm.field == 2 {
+			m.cyclePriority(1)
+		} else {
+			m.editText("l")
 		}
 	case "backspace":
 		m.editText("")
@@ -248,6 +288,22 @@ func (m *model) cycleStatus(direction int) {
 	}
 	current = (current + direction + len(statuses)) % len(statuses)
 	m.editForm.status = statuses[current]
+}
+
+func (m *model) cyclePriority(direction int) {
+	// Default priority range: 1-5
+	p := 3
+	if m.editForm.priority != "" {
+		fmt.Sscanf(m.editForm.priority, "%d", &p)
+	}
+	p += direction
+	if p < 1 {
+		p = 1
+	}
+	if p > 5 {
+		p = 5
+	}
+	m.editForm.priority = fmt.Sprintf("%d", p)
 }
 
 func (m *model) initForm() {
@@ -357,15 +413,26 @@ func (m model) addTask() (tea.Model, tea.Cmd) {
 func (m *model) buildItems() {
 	m.items = []item{}
 
-	// Root tasks first
-	if tasks, exists := m.tasks[""]; exists {
-		m.addTopic("", tasks)
-	}
-
-	// Other topics
+	// Add topics first (excluding root)
 	for topic, tasks := range m.tasks {
 		if topic != "" {
 			m.addTopic(topic, tasks)
+		}
+	}
+
+	// Add root tasks directly (not under a 'Root' group)
+	if tasks, exists := m.tasks[""]; exists {
+		for _, task := range tasks {
+			title := task.Task.Title
+			if task.Task.Priority != 3 {
+				title = fmt.Sprintf("[%d] %s", task.Task.Priority, title)
+			}
+			m.items = append(m.items, item{
+				text:    getStatusIcon(task.Task.Status) + " " + title,
+				isTopic: false,
+				topic:   "",
+				task:    task,
+			})
 		}
 	}
 }

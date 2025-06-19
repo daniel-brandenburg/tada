@@ -3,12 +3,34 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
 
+func findTadaDir(start string) (string, error) {
+	dir := start
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".tada")); err == nil {
+			return filepath.Join(dir, ".tada"), nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", fmt.Errorf(".tada folder not found")
+}
+
 func main() {
-	store := NewFileStore()
+	cwd, _ := os.Getwd()
+	tadaDir, err := findTadaDir(cwd)
+	if err != nil {
+		fmt.Println("No .tada folder found in this or any parent directory.")
+		os.Exit(1)
+	}
+	store := NewFileStore(tadaDir)
 	var rootCmd = &cobra.Command{
 		Use:   "tada",
 		Short: "A terminal-based todo application",
@@ -18,7 +40,6 @@ func main() {
 	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store), NewCompleteCmd(store), NewTuiCmd(store))
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
 		os.Exit(1)
 	}
 }

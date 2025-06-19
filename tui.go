@@ -29,6 +29,12 @@ type model struct {
 	editForm form
 	err      error
 	height   int // track terminal height
+	// QoL features
+	yankedTask  *TaskWithPath
+	searchQuery string
+	searchMode  bool
+	showDetails bool
+	toArchive   []*TaskWithPath // tasks to archive on exit
 }
 
 type item struct {
@@ -83,6 +89,22 @@ func loadTasks() tea.Msg {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.searchMode {
+			if msg.String() == "esc" {
+				m.searchMode = false
+				m.searchQuery = ""
+				m.buildItems()
+				return m, nil
+			}
+			if msg.String() == "backspace" && len(m.searchQuery) > 0 {
+				m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+				return m, nil
+			}
+			if len(msg.String()) == 1 {
+				m.searchQuery += msg.String()
+				return m, nil
+			}
+		}
 		if m.mode == editView {
 			return m.updateEditView(msg)
 		} else if m.mode == addView {
@@ -107,7 +129,80 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "q":
+		// Archive any completed tasks before quitting
+		if len(m.toArchive) > 0 {
+			for _, task := range m.toArchive {
+				store := NewFileStore()
+				_ = store.CompleteTask(task.Topic, task.Task.Title)
+			}
+		}
 		return m, tea.Quit
+	case "/":
+		m.searchMode = true
+		m.searchQuery = ""
+		return m, nil
+	case "i":
+		m.showDetails = true
+		return m, nil
+	case "esc":
+		if m.searchMode {
+			m.searchMode = false
+			m.searchQuery = ""
+			m.buildItems()
+			return m, nil
+		}
+		if m.showDetails {
+			m.showDetails = false
+			return m, nil
+		}
+	case "y":
+		if m.selected < len(m.items) && m.items[m.selected].task != nil {
+			m.yankedTask = m.items[m.selected].task
+		}
+	case "p":
+		if m.yankedTask != nil {
+			copy := *m.yankedTask
+			orig := m.yankedTask.Task
+			copy.Task = &Task{
+				Title:       orig.Title + " (Copy)",
+				Description: orig.Description,
+				Status:      orig.Status,
+				Priority:    orig.Priority,
+				Tags:        append([]string{}, orig.Tags...),
+			}
+			store := NewFileStore()
+			_ = store.SaveTask(copy.Topic, copy.Task)
+			return m, loadTasks
+		}
+	case "d":
+		if m.selected < len(m.items) && m.items[m.selected].task != nil {
+			// For simplicity, delete immediately (could add confirmation)
+			task := m.items[m.selected].task
+			_ = os.Remove(task.FilePath)
+			return m, loadTasks
+		}
+	case "e":
+		if m.selected < len(m.items) && m.items[m.selected].task != nil {
+			m.mode = editView
+			m.editTask = m.items[m.selected].task
+			m.initForm()
+			return m, nil
+		}
+	case "s":
+		if m.selected < len(m.items) && m.items[m.selected].task != nil {
+			task := m.items[m.selected].task
+			m.cycleTaskStatus(task, 1)
+			if task.Task.Status == StatusDone {
+				m.toArchive = append(m.toArchive, task)
+			}
+			return m, loadTasks
+		}
+	case "S":
+		if m.selected < len(m.items) && m.items[m.selected].task != nil {
+			task := m.items[m.selected].task
+			m.cycleTaskStatus(task, -1)
+			return m, loadTasks
+		}
 	case "j", "down":
 		if m.selected < len(m.items)-1 {
 			m.selected++
@@ -424,8 +519,36 @@ func (m model) addTask() (tea.Model, tea.Cmd) {
 	return m, loadTasks
 }
 
+// Cycles the status of a given task (for list view status cycling)
+func (m *model) cycleTaskStatus(task *TaskWithPath, direction int) {
+	statuses := []TaskStatus{StatusTodo, StatusInProgress, StatusDone, StatusPaused, StatusCancelled}
+	current := 0
+	for i, status := range statuses {
+		if status == task.Task.Status {
+			current = i
+			break
+		}
+	}
+	current = (current + direction + len(statuses)) % len(statuses)
+	task.Task.Status = statuses[current]
+	// Save the updated status to the original file path
+	store := NewFileStore()
+	content := store.taskToMarkdown(task.Task)
+	_ = os.WriteFile(task.FilePath, []byte(content), 0644)
+}
+
 func (m *model) buildItems() {
 	m.items = []item{}
+
+	// Helper to check if a task is in toArchive
+	inToArchive := func(task *TaskWithPath) bool {
+		for _, t := range m.toArchive {
+			if t.FilePath == task.FilePath {
+				return true
+			}
+		}
+		return false
+	}
 
 	// Add topics first (excluding root)
 	for topic, tasks := range m.tasks {
@@ -437,6 +560,9 @@ func (m *model) buildItems() {
 	// Add root tasks directly (not under a 'Root' group)
 	if tasks, exists := m.tasks[""]; exists {
 		for _, task := range tasks {
+			if task.Task.Status == StatusDone && !inToArchive(task) {
+				continue // hide completed tasks unless just completed
+			}
 			title := task.Task.Title
 			if task.Task.Priority != 3 {
 				title = fmt.Sprintf("[%d] %s", task.Task.Priority, title)
@@ -463,8 +589,20 @@ func (m *model) addTopic(topic string, tasks []*TaskWithPath) {
 		topic:   topic,
 	})
 
+	inToArchive := func(task *TaskWithPath) bool {
+		for _, t := range m.toArchive {
+			if t.FilePath == task.FilePath {
+				return true
+			}
+		}
+		return false
+	}
+
 	if m.expanded[topic] {
 		for _, task := range tasks {
+			if task.Task.Status == StatusDone && !inToArchive(task) {
+				continue // hide completed tasks unless just completed
+			}
 			title := task.Task.Title
 			if task.Task.Priority != 3 {
 				title = fmt.Sprintf("[%d] %s", task.Task.Priority, title)
@@ -511,6 +649,27 @@ func (m model) View() string {
 }
 
 func (m model) viewList() string {
+	if m.showDetails && m.selected < len(m.items) && m.items[m.selected].task != nil {
+		task := m.items[m.selected].task.Task
+		s := "Task Details\n"
+		s += "Title: " + task.Title + "\n"
+		s += "Description: " + task.Description + "\n"
+		s += "Priority: " + fmt.Sprintf("%d", task.Priority) + "\n"
+		s += "Status: " + string(task.Status) + "\n"
+		s += "Tags: " + strings.Join(task.Tags, ", ") + "\n"
+		s += "(Press esc to close)\n"
+		return s
+	}
+	if m.searchMode {
+		s := "Search: " + m.searchQuery + "\n"
+		for _, item := range m.items {
+			if item.task != nil && strings.Contains(strings.ToLower(item.task.Task.Title), strings.ToLower(m.searchQuery)) {
+				s += item.text + "\n"
+			}
+		}
+		s += "(Press esc to exit search)\n"
+		return s
+	}
 	s := "TADA - Todo Manager\n"
 	s += mutedStyle.Render("j/k: move • space: expand • enter: edit • a: add • r: refresh • q: quit") + "\n\n"
 

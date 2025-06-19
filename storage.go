@@ -230,12 +230,16 @@ func (fs *FileStore) CompleteTask(topic, title string) error {
 	targetTask.Task.CompletedAt = &now
 
 	// Move to archive
-	archivePath := filepath.Join(fs.basePath, ArchiveDir, topic)
+	archivePath := filepath.Join(fs.basePath, ArchiveDir)
+	if topic != "" {
+		archivePath = filepath.Join(fs.basePath, ArchiveDir, topic)
+	}
 	if err := os.MkdirAll(archivePath, 0755); err != nil {
 		return fmt.Errorf("failed to create archive directory: %w", err)
 	}
 
-	filename := filepath.Base(targetTask.FilePath)
+	// Always generate a new unique filename for the archive
+	filename := fs.generateFileName(targetTask.Task.Title)
 	newPath := filepath.Join(archivePath, filename)
 
 	// Save updated task to archive

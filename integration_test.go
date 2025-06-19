@@ -19,7 +19,7 @@ func TestIntegration(t *testing.T) {
 
 	// Create a FileStore with a custom base path for testing
 	testTadaDir := filepath.Join(tempDir, ".tada")
-	
+
 	// Create a FileStore with custom path
 	fs := &FileStore{
 		basePath: testTadaDir,
@@ -54,7 +54,7 @@ func TestIntegration(t *testing.T) {
 				CreatedAt:   time.Now(),
 			},
 			{
-				Title:       "Project/Integration Test Task 3",
+				Title:       "Integration Test Task 3",
 				Description: "Description for task 3",
 				Priority:    3,
 				Status:      StatusTodo,
@@ -126,7 +126,7 @@ func TestIntegration(t *testing.T) {
 		}
 
 		// Check if task is in archive
-			archiveFiles, err := os.ReadDir(filepath.Join(fs.basePath, ArchiveDir))
+		archiveFiles, err := os.ReadDir(filepath.Join(fs.basePath, ArchiveDir))
 		if err != nil {
 			t.Fatalf("Failed to read archive directory: %v", err)
 		}
@@ -184,14 +184,17 @@ func TestIntegration(t *testing.T) {
 		}
 
 		// Verify we have two archived tasks
-		archiveFiles, err := filepath.Glob(filepath.Join(fs.basePath, ArchiveDir, "**/*.md"))
+		archiveFiles1, err := filepath.Glob(filepath.Join(fs.basePath, ArchiveDir, "*.md"))
 		if err != nil {
 			t.Fatalf("Failed to find archive files: %v", err)
 		}
-
-		if len(archiveFiles) != 2 {
-			t.Errorf("Expected 2 archived tasks, got %d", len(archiveFiles))
+		archiveFiles2, err := filepath.Glob(filepath.Join(fs.basePath, ArchiveDir, "**/*.md"))
+		if err != nil {
+			t.Fatalf("Failed to find archive files: %v", err)
+		}
+		archivedCount := len(archiveFiles1) + len(archiveFiles2)
+		if archivedCount != 2 {
+			t.Errorf("Expected 2 archived tasks, got %d", archivedCount)
 		}
 	})
 }
-

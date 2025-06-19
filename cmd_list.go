@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -43,7 +42,7 @@ func NewListCmd(store *FileStore) *cobra.Command {
 			}
 
 			// Display in table format
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "TOPIC\tTITLE\tPRIORITY\tSTATUS\tTAGS\tCREATED")
 
 			for topic, taskList := range tasks {

@@ -49,16 +49,14 @@ type form struct {
 
 // Simple color scheme
 var (
-	accent    = lipgloss.Color("12") // bright blue
-	secondary = lipgloss.Color("10") // bright green
-	muted     = lipgloss.Color("8")  // gray
-	danger    = lipgloss.Color("9")  // bright red
-	warning   = lipgloss.Color("11") // bright yellow
+	accent = lipgloss.Color("12") // bright blue
+	// mutedStyle is used for help text and muted UI elements
+	muted      = lipgloss.Color("8") // gray
+	mutedStyle = lipgloss.NewStyle().Foreground(muted)
+	warning    = lipgloss.Color("11") // bright yellow
 
 	selectedStyle = lipgloss.NewStyle().Reverse(true)
 	topicStyle    = lipgloss.NewStyle().Foreground(accent).Bold(true)
-	taskStyle     = lipgloss.NewStyle()
-	mutedStyle    = lipgloss.NewStyle().Foreground(muted)
 	focusStyle    = lipgloss.NewStyle().Foreground(warning).Bold(true)
 )
 
@@ -331,17 +329,6 @@ func (m *model) initForm() {
 	}
 }
 
-func (m *model) initAddForm() {
-	m.editForm = form{
-		field:    0,
-		title:    "",
-		desc:     "",
-		priority: "3",
-		status:   StatusTodo,
-		tags:     "",
-	}
-}
-
 func (m *model) initAddFormWithTopic(topic string) {
 	m.editForm = form{
 		field:    0,
@@ -429,7 +416,7 @@ func (m model) addTask() (tea.Model, tea.Cmd) {
 
 	store := NewFileStore()
 	if err := store.SaveTask(topic, task); err != nil {
-		m.err = fmt.Errorf("Error adding task: %v\n", err)
+		m.err = fmt.Errorf("error adding task: %v", err)
 		return m, nil
 	}
 

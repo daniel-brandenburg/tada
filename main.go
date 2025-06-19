@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/charmbracelet/fang"
 	"github.com/spf13/cobra"
 )
 
@@ -40,9 +42,9 @@ func main() {
 		},
 	}
 
-	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store), NewCompleteCmd(store))
+	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store), NewCompleteCmd(store), NewTuiCmd(store), NewEditCmd(store), NewDeleteCmd(store))
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := fang.Execute(context.TODO(), rootCmd); err != nil {
 		os.Exit(1)
 	}
 }

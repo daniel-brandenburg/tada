@@ -28,14 +28,14 @@ func TestYankAndPaste(t *testing.T) {
 	}
 	m2m.yankedTask = task
 	_, _ = m2m.updateListView(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
-	// Clean up any copied files
+	// Clean up any copied files (match slugified/lowercase names)
 	tasksDir := ".tada/tasks"
 	entries, _ := os.ReadDir(tasksDir)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
-		if strings.Contains(entry.Name(), "TestTask-(Copy)") || strings.Contains(entry.Name(), "TestTask (Copy)") {
+		if strings.Contains(strings.ToLower(entry.Name()), "testtask-copy") {
 			_ = os.Remove(tasksDir + "/" + entry.Name())
 		}
 	}

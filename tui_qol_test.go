@@ -28,7 +28,17 @@ func TestYankAndPaste(t *testing.T) {
 	}
 	m2m.yankedTask = task
 	_, _ = m2m.updateListView(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
-	// Can't check file system, but should not panic
+	// Clean up any copied files
+	tasksDir := ".tada/tasks"
+	entries, _ := os.ReadDir(tasksDir)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if strings.Contains(entry.Name(), "TestTask-(Copy)") || strings.Contains(entry.Name(), "TestTask (Copy)") {
+			_ = os.Remove(tasksDir + "/" + entry.Name())
+		}
+	}
 }
 
 func TestStatusCycle(t *testing.T) {

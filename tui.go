@@ -128,8 +128,18 @@ func (m model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "a":
+		// If a topic or a task within a topic is selected, prefill the title with the topic
+		topic := ""
+		if m.selected < len(m.items) {
+			item := m.items[m.selected]
+			if item.isTopic {
+				topic = item.topic
+			} else if item.task != nil && item.topic != "" {
+				topic = item.topic
+			}
+		}
 		m.mode = addView
-		m.initAddForm()
+		m.initAddFormWithTopic(topic)
 	case "r":
 		return m, loadTasks
 	}
@@ -326,6 +336,20 @@ func (m *model) initAddForm() {
 		priority: "3",
 		status:   StatusTodo,
 		tags:     "",
+	}
+}
+
+func (m *model) initAddFormWithTopic(topic string) {
+	m.editForm = form{
+		field:    0,
+		title:    "",
+		desc:     "",
+		priority: "3",
+		status:   StatusTodo,
+		tags:     "",
+	}
+	if topic != "" {
+		m.editForm.title = topic + "/"
 	}
 }
 

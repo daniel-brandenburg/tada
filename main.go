@@ -35,9 +35,12 @@ func main() {
 		Use:   "tada",
 		Short: "A terminal-based todo application",
 		Long:  "A terminal-based todo application\n\nTada is a simple yet powerful todo application with both CLI and TUI interfaces",
+		Run: func(cmd *cobra.Command, args []string) {
+			RunTUI()
+		},
 	}
 
-	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store), NewCompleteCmd(store), NewTuiCmd(store))
+	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store), NewCompleteCmd(store))
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

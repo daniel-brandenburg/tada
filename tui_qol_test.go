@@ -48,6 +48,7 @@ func TestStatusCycle(t *testing.T) {
 	if realTask == nil {
 		t.Fatalf("Task not found after saving")
 	}
+	defer os.Remove(realTask.FilePath)
 	m := model{tasks: map[string][]*TaskWithPath{"": {realTask}}, items: []item{{task: realTask}}, selected: 0}
 	m.cycleTaskStatus(realTask, 1) // cycle forward
 	loaded, _ = store.LoadAllTasks()
@@ -132,20 +133,32 @@ func TestDetailsPopup(t *testing.T) {
 }
 
 func TestCompletedTaskVisibleUntilExit(t *testing.T) {
-	f, _ := os.CreateTemp("", "testfile-*.md")
-	defer os.Remove(f.Name())
-	task := &TaskWithPath{Task: &Task{Title: "CompleteMe", Status: StatusTodo}, FilePath: f.Name()}
 	store := NewFileStore()
+	task := &TaskWithPath{Task: &Task{Title: "CompleteMe", Status: StatusTodo}}
 	_ = store.SaveTask("", task.Task)
-	m := model{tasks: map[string][]*TaskWithPath{"": {task}}, selected: 0}
+	// Find the file path actually used
+	loaded, _ := store.LoadAllTasks()
+	var realTask *TaskWithPath
+	for _, tasks := range loaded {
+		for _, t := range tasks {
+			if t.Task.Title == "CompleteMe" {
+				realTask = t
+			}
+		}
+	}
+	if realTask == nil {
+		t.Fatalf("Task not found after saving")
+	}
+	defer os.Remove(realTask.FilePath)
+	m := model{tasks: map[string][]*TaskWithPath{"": {realTask}}, selected: 0}
 	m.buildItems()
 	if len(m.items) == 0 || m.items[0].task.Task.Title != "CompleteMe" {
 		t.Fatalf("Task should be visible before completion")
 	}
 	// Simulate cycling to done
-	m.cycleTaskStatus(task, 1) // Todo -> InProgress
-	m.cycleTaskStatus(task, 1) // InProgress -> Done
-	m.toArchive = append(m.toArchive, task)
+	m.cycleTaskStatus(realTask, 1) // Todo -> InProgress
+	m.cycleTaskStatus(realTask, 1) // InProgress -> Done
+	m.toArchive = append(m.toArchive, realTask)
 	m.buildItems()
 	found := false
 	for _, it := range m.items {

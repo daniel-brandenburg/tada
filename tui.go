@@ -28,6 +28,7 @@ type model struct {
 	editTask *TaskWithPath
 	editForm form
 	err      error
+	height   int // track terminal height
 }
 
 type item struct {
@@ -90,7 +91,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateAddView(msg)
 		}
 		return m.updateListView(msg)
-
+	case tea.WindowSizeMsg:
+		m.height = msg.Height
+		return m, nil
 	case struct {
 		tasks map[string][]*TaskWithPath
 		err   error
@@ -528,7 +531,36 @@ func (m model) viewList() string {
 		return s + mutedStyle.Render("No tasks found. Press 'a' to add a task.")
 	}
 
-	for i, item := range m.items {
+	height := m.height
+	if height == 0 {
+		height = 24 // fallback default
+	}
+	reserved := 4 // header + help + some padding
+	visibleLines := height - reserved
+	if visibleLines < 1 {
+		visibleLines = 1
+	}
+
+	start := 0
+	end := len(m.items)
+	if len(m.items) > visibleLines {
+		// Center selected if possible
+		start = m.selected - visibleLines/2
+		if start < 0 {
+			start = 0
+		}
+		end = start + visibleLines
+		if end > len(m.items) {
+			end = len(m.items)
+			start = end - visibleLines
+			if start < 0 {
+				start = 0
+			}
+		}
+	}
+
+	for i := start; i < end; i++ {
+		item := m.items[i]
 		line := item.text
 
 		if item.isTopic {

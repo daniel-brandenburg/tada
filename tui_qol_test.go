@@ -98,7 +98,8 @@ func TestDeleteTask(t *testing.T) {
 	defer os.Remove(f.Name())
 	task := &TaskWithPath{Task: &Task{Title: "DelTask"}, FilePath: f.Name()}
 	m := model{items: []item{{task: task}}, selected: 0}
-	_, _ = m.updateListView(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	m2, _ := m.updateListView(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	_, _ = m2.(model).updateListView(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	if _, err := os.Stat(f.Name()); !os.IsNotExist(err) {
 		t.Errorf("Expected file to be deleted")
 	}

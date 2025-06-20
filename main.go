@@ -43,6 +43,10 @@ Happy tasking!
 }
 
 func main() {
+	if os.Getenv("TADA_TEST_NO_TUI") == "1" {
+		fmt.Fprintln(os.Stderr, "TUI disabled for test")
+		osExit(0)
+	}
 	cwd, _ := os.Getwd()
 	tadaDir, err := findTadaDir(cwd)
 	if err != nil {
@@ -63,7 +67,7 @@ func main() {
 
 	rootCmd.CompletionOptions.DisableDefaultCmd = false
 
-	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store, cfg), NewCompleteCmd(store), NewTuiCmd(store), NewEditCmd(store), NewDeleteCmd(store), NewShowCmd(store), NewMoveCmd(store), NewCopyCmd(store), NewBulkCmd(store), NewConfigCmd())
+	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store, cfg), NewCompleteCmd(store), NewTuiCmd(store), NewEditCmd(store), NewDeleteCmd(store), NewShowCmd(store), NewMoveCmd(store), NewCopyCmd(store), NewBulkCmd(store), NewConfigCmd(), NewVersionCmd())
 
 	if err := fang.Execute(context.TODO(), rootCmd); err != nil {
 		osExit(1)

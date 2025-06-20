@@ -107,3 +107,61 @@ func exportMarkdown(out *os.File, tasks map[string][]*TaskWithPath) error {
 	}
 	return nil
 }
+
+// ExportTasksToFile exports a flat slice of tasks to the given file in the specified format (csv, json, md)
+func ExportTasksToFile(tasks []*TaskWithPath, format, filePath string) error {
+	var out *os.File
+	var err error
+	if filePath == "" || filePath == "-" {
+		out = os.Stdout
+	} else {
+		out, err = os.Create(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to create output file: %w", err)
+		}
+		defer out.Close()
+	}
+	switch format {
+	case "json":
+		var all []*Task
+		for _, t := range tasks {
+			all = append(all, t.Task)
+		}
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		return enc.Encode(all)
+	case "csv":
+		w := csv.NewWriter(out)
+		defer w.Flush()
+		w.Write([]string{"Title", "Description", "Priority", "Status", "Tags", "CreatedAt", "CompletedAt"})
+		for _, t := range tasks {
+			w.Write([]string{
+				t.Task.Title,
+				t.Task.Description,
+				fmt.Sprintf("%d", t.Task.Priority),
+				string(t.Task.Status),
+				strings.Join(t.Task.Tags, ","),
+				t.Task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+				formatCompletedAt(t.Task.CompletedAt),
+			})
+		}
+		return w.Error()
+	case "md", "markdown":
+		for _, t := range tasks {
+			task := t.Task
+			fmt.Fprintf(out, "# %s\n\n", task.Title)
+			fmt.Fprintf(out, "- **Description:** %s\n", task.Description)
+			fmt.Fprintf(out, "- **Priority:** %d\n", task.Priority)
+			fmt.Fprintf(out, "- **Status:** %s\n", task.Status)
+			fmt.Fprintf(out, "- **Tags:** %s\n", strings.Join(task.Tags, ", "))
+			fmt.Fprintf(out, "- **Created At:** %s\n", task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"))
+			if task.CompletedAt != nil {
+				fmt.Fprintf(out, "- **Completed At:** %s\n", task.CompletedAt.Format("2006-01-02T15:04:05Z07:00"))
+			}
+			fmt.Fprintln(out)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported format: %s", format)
+	}
+}

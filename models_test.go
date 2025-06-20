@@ -120,4 +120,3 @@ func TestTaskWithPath(t *testing.T) {
 		t.Errorf("Expected Topic to be 'test-topic', got '%s'", taskWithPath.Topic)
 	}
 }
-

@@ -240,9 +240,9 @@ func TestTaskToMarkdown(t *testing.T) {
 		"tags:",
 		"- test",
 		"- unit-test",
-		"created_at:", // followed by timestamp
-		"---", // YAML frontmatter end
-		"# Test Task", // Title heading
+		"created_at:",         // followed by timestamp
+		"---",                 // YAML frontmatter end
+		"# Test Task",         // Title heading
 		"This is a test task", // Description
 	}
 
@@ -257,4 +257,3 @@ func TestTaskToMarkdown(t *testing.T) {
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
-

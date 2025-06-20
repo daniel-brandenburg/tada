@@ -1,4 +1,5 @@
 // tui.go
+// Package main implements the Tada terminal-based todo manager TUI.
 package main
 
 import (
@@ -7,9 +8,25 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// UndoActionType represents the type of action that can be undone.
+type UndoActionType int
+
+const (
+	UndoNone UndoActionType = iota
+	UndoDelete
+	UndoComplete
+)
+
+type UndoEntry struct {
+	Action UndoActionType
+	Task   *TaskWithPath
+}
 
 type viewMode int
 
@@ -19,6 +36,7 @@ const (
 	addView
 )
 
+// model represents the TUI state and logic for the todo manager.
 type model struct {
 	tasks    map[string][]*TaskWithPath
 	items    []item
@@ -38,6 +56,18 @@ type model struct {
 	store         *FileStore      // injected for testability, optional
 	confirmDelete bool            // show confirm dialog
 	pendingDelete *TaskWithPath   // task to delete if confirmed
+
+	// Undo stack (single-level for now)
+	undoStack []UndoEntry
+	undoMsg   string // status message for undo
+
+	// Bulk selection support
+	selectedItems map[int]struct{} // index-based selection for bulk actions
+	lastSelect    int              // for range selection (V)
+
+	// Export prompt state
+	exportPrompt *exportPromptState // nil unless prompting for export
+	exportMsg    string             // status message for export
 }
 
 type item struct {
@@ -56,6 +86,12 @@ type form struct {
 	tags     string
 }
 
+type exportPromptState struct {
+	step     int // 0: format, 1: path
+	format   string
+	filePath string
+}
+
 // Simple color scheme
 var (
 	accent = lipgloss.Color("12") // bright blue
@@ -71,8 +107,10 @@ var (
 
 func initialModel() model {
 	return model{
-		expanded: make(map[string]bool),
-		mode:     listView,
+		expanded:      make(map[string]bool),
+		mode:          listView,
+		selectedItems: make(map[int]struct{}),
+		lastSelect:    -1,
 	}
 }
 
@@ -92,6 +130,9 @@ func loadTasks() tea.Msg {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.exportPrompt != nil {
+			return m.updateExportPrompt(msg)
+		}
 		if m.searchMode {
 			if msg.String() == "esc" {
 				m.searchMode = false
@@ -129,12 +170,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// updateListView handles key events and actions in the main list view.
 func (m model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.confirmDelete {
 		switch msg.String() {
 		case "y":
 			if m.pendingDelete != nil {
+				// Save undo info before deleting
+				m.undoStack = append(m.undoStack, UndoEntry{Action: UndoDelete, Task: m.pendingDelete})
 				_ = os.Remove(m.pendingDelete.FilePath)
+				m.undoMsg = "Task deleted. Press 'u' to undo."
 			}
 			m.confirmDelete = false
 			m.pendingDelete = nil
@@ -172,17 +217,6 @@ func (m model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.showDetails = true
 		return m, nil
-	case "esc":
-		if m.searchMode {
-			m.searchMode = false
-			m.searchQuery = ""
-			m.buildItems()
-			return m, nil
-		}
-		if m.showDetails {
-			m.showDetails = false
-			return m, nil
-		}
 	case "y":
 		if m.selected < len(m.items) && m.items[m.selected].task != nil {
 			m.yankedTask = m.items[m.selected].task
@@ -203,6 +237,18 @@ func (m model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, loadTasks
 		}
 	case "d":
+		if len(m.selectedItems) > 0 {
+			// Bulk delete
+			for idx := range m.selectedItems {
+				if idx < len(m.items) && m.items[idx].task != nil {
+					_ = os.Remove(m.items[idx].task.FilePath)
+					m.undoStack = append(m.undoStack, UndoEntry{Action: UndoDelete, Task: m.items[idx].task})
+				}
+			}
+			m.undoMsg = "Bulk delete complete. Press 'u' to undo last."
+			m.selectedItems = make(map[int]struct{})
+			return m, loadTasks
+		}
 		if m.selected < len(m.items) && m.items[m.selected].task != nil {
 			m.confirmDelete = true
 			m.pendingDelete = m.items[m.selected].task
@@ -216,11 +262,27 @@ func (m model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case "s":
+		if len(m.selectedItems) > 0 {
+			for idx := range m.selectedItems {
+				if idx < len(m.items) && m.items[idx].task != nil {
+					task := m.items[idx].task
+					m.cycleTaskStatus(task, 1)
+					if task.Task.Status == StatusDone {
+						m.toArchive = append(m.toArchive, task)
+						m.undoStack = append(m.undoStack, UndoEntry{Action: UndoComplete, Task: task})
+					}
+				}
+			}
+			m.undoMsg = "Bulk status cycle complete. Press 'u' to undo last."
+			return m, loadTasks
+		}
 		if m.selected < len(m.items) && m.items[m.selected].task != nil {
 			task := m.items[m.selected].task
 			m.cycleTaskStatus(task, 1)
 			if task.Task.Status == StatusDone {
 				m.toArchive = append(m.toArchive, task)
+				m.undoStack = append(m.undoStack, UndoEntry{Action: UndoComplete, Task: task})
+				m.undoMsg = "Task completed. Press 'u' to undo."
 			}
 			return m, loadTasks
 		}
@@ -265,10 +327,91 @@ func (m model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.initAddFormWithTopic(topic)
 	case "r":
 		return m, loadTasks
+	case "u":
+		if len(m.undoStack) > 0 {
+			entry := m.undoStack[len(m.undoStack)-1]
+			m.undoStack = m.undoStack[:len(m.undoStack)-1]
+			switch entry.Action {
+			case UndoDelete:
+				// Restore deleted task at original file path
+				if entry.Task != nil && entry.Task.FilePath != "" && entry.Task.Task != nil {
+					content := "---\n"
+					if entry.Task.Task != nil {
+						data, _ := yaml.Marshal(entry.Task.Task)
+						content += string(data)
+					}
+					content += "---\n\n# " + entry.Task.Task.Title + "\n"
+					_ = os.WriteFile(entry.Task.FilePath, []byte(content), 0644)
+					m.undoMsg = "Undo: Task restored."
+					return m, loadTasks
+				}
+				m.undoMsg = "Undo failed."
+				return m, nil
+			case UndoComplete:
+				// Mark as not completed
+				entry.Task.Task.Status = StatusTodo
+				entry.Task.Task.CompletedAt = nil
+				store := m.store
+				if store == nil {
+					store = NewFileStore()
+				}
+				_ = store.SaveTask(entry.Task.Topic, entry.Task.Task)
+				m.undoMsg = "Undo: Task marked as not completed."
+				return m, loadTasks
+			}
+		}
+	case "x":
+		if len(m.selectedItems) > 0 {
+			m.exportPrompt = &exportPromptState{step: 0}
+			return m, nil
+		}
+	case "V":
+		if m.lastSelect == -1 {
+			m.lastSelect = m.selected
+			m.selectedItems = map[int]struct{}{m.selected: {}}
+		} else {
+			start, end := m.lastSelect, m.selected
+			if start > end {
+				start, end = end, start
+			}
+			for i := start; i <= end; i++ {
+				m.selectedItems[i] = struct{}{}
+			}
+			m.lastSelect = -1 // reset after range select
+		}
+		return m, nil
+	case "v":
+		if m.selectedItems == nil {
+			m.selectedItems = make(map[int]struct{})
+		}
+		if _, ok := m.selectedItems[m.selected]; ok {
+			delete(m.selectedItems, m.selected)
+		} else {
+			m.selectedItems[m.selected] = struct{}{}
+		}
+		m.lastSelect = -1 // clear range mode if toggling single
+		return m, nil
+	case "esc":
+		if len(m.selectedItems) > 0 {
+			m.selectedItems = make(map[int]struct{})
+			m.lastSelect = -1
+			return m, nil
+		}
+		if m.searchMode {
+			m.searchMode = false
+			m.searchQuery = ""
+			m.buildItems()
+			return m, nil
+		}
+		if m.showDetails {
+			m.showDetails = false
+			return m, nil
+		}
 	}
 	return m, nil
 }
 
+// updateEditView handles key events and actions in the edit view.
 func (m model) updateEditView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "esc":
@@ -325,6 +468,7 @@ func (m model) updateEditView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// updateAddView handles key events and actions in the add view.
 func (m model) updateAddView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "esc":
@@ -465,6 +609,7 @@ func (m *model) initAddFormWithTopic(topic string) {
 	}
 }
 
+// saveTask saves the current task edits to the file.
 func (m model) saveTask() (tea.Model, tea.Cmd) {
 	task := m.editTask.Task
 	task.Title = m.editForm.title
@@ -497,6 +642,7 @@ func (m model) saveTask() (tea.Model, tea.Cmd) {
 	return m, loadTasks
 }
 
+// addTask adds a new task from the add view form.
 func (m model) addTask() (tea.Model, tea.Cmd) {
 	if m.editForm.title == "" {
 		m.err = fmt.Errorf("title cannot be empty")
@@ -564,6 +710,7 @@ func (m *model) cycleTaskStatus(task *TaskWithPath, direction int) {
 	_ = os.WriteFile(task.FilePath, []byte(content), 0644)
 }
 
+// buildItems constructs the visible list of items for the current state.
 func (m *model) buildItems() {
 	m.items = []item{}
 
@@ -733,6 +880,13 @@ func (m model) viewList() string {
 		if i == m.selected {
 			line = selectedStyle.Render(line)
 		}
+		if m.selectedItems != nil {
+			if _, ok := m.selectedItems[i]; ok {
+				line = focusStyle.Render("[✔] ") + line
+			} else {
+				line = "    " + line
+			}
+		}
 
 		s += line + "\n"
 
@@ -757,6 +911,13 @@ func (m model) viewList() string {
 		}
 	}
 
+	// Show undo status message if present
+	if m.undoMsg != "" {
+		s += focusStyle.Render(m.undoMsg) + "\n"
+	}
+	if m.exportMsg != "" {
+		s += focusStyle.Render(m.exportMsg) + "\n"
+	}
 	return s
 }
 
@@ -870,6 +1031,7 @@ func (m model) viewAdd() string {
 	return s
 }
 
+// RunTUI launches the Tada TUI application.
 func RunTUI() {
 	p := tea.NewProgram(initialModel())
 	if _, err := p.Run(); err != nil {
@@ -878,6 +1040,7 @@ func RunTUI() {
 	}
 }
 
+// RunTUIWithConfig launches the Tada TUI with a custom config.
 func RunTUIWithConfig(cfg *Config) {
 	m := initialModel()
 	m.applyConfig(cfg)
@@ -917,4 +1080,63 @@ func showWelcomeIfNeeded(cfg *Config, tadaDir string) {
 	fmt.Println(onboardingMessage())
 	// Mark as shown
 	_ = os.WriteFile(flagPath, []byte("shown\n"), 0644)
+}
+
+func (m *model) updateExportPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	prompt := m.exportPrompt
+	switch prompt.step {
+	case 0: // format
+		if msg.String() == "1" {
+			prompt.format = "csv"
+			prompt.step = 1
+			return m, nil
+		} else if msg.String() == "2" {
+			prompt.format = "json"
+			prompt.step = 1
+			return m, nil
+		} else if msg.String() == "3" {
+			prompt.format = "md"
+			prompt.step = 1
+			return m, nil
+		} else if msg.String() == "esc" {
+			m.exportPrompt = nil
+			return m, nil
+		}
+	case 1: // file path (accept any input, enter to confirm)
+		if msg.String() == "esc" {
+			m.exportPrompt = nil
+			return m, nil
+		} else if msg.String() == "backspace" && len(prompt.filePath) > 0 {
+			prompt.filePath = prompt.filePath[:len(prompt.filePath)-1]
+			return m, nil
+		} else if msg.String() == "enter" && prompt.filePath != "" {
+			// Do export
+			err := m.bulkExportSelected(prompt.format, prompt.filePath)
+			if err != nil {
+				m.exportMsg = "Export failed: " + err.Error()
+			} else {
+				m.exportMsg = "Exported selected tasks to " + prompt.filePath
+			}
+			m.exportPrompt = nil
+			return m, nil
+		} else if len(msg.String()) == 1 {
+			prompt.filePath += msg.String()
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+func (m *model) bulkExportSelected(format, filePath string) error {
+	var tasks []*TaskWithPath
+	for idx := range m.selectedItems {
+		if idx < len(m.items) && m.items[idx].task != nil {
+			tasks = append(tasks, m.items[idx].task)
+		}
+	}
+	if len(tasks) == 0 {
+		return fmt.Errorf("no tasks selected")
+	}
+	// Use export logic from cmd_export.go (refactor if needed)
+	return ExportTasksToFile(tasks, format, filePath)
 }

@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var osExit = os.Exit
+
 func findTadaDir(start string) (string, error) {
 	dir := start
 	for {
@@ -23,7 +25,21 @@ func findTadaDir(start string) (string, error) {
 		}
 		dir = parent
 	}
-	return "", fmt.Errorf(".tada folder not found")
+	return "", fmt.Errorf(".tada folder not found") /*  */
+}
+
+func onboardingMessage() string {
+	return `
+Welcome to Tada! 🎉
+
+- Use 'tada tui' for the interactive terminal UI.
+- Use 'tada list', 'tada add', etc. for CLI commands.
+- Run 'tada completion [bash|zsh|fish|powershell]' to enable shell completions.
+- Run 'tada config show' to see or edit your config (global or per-project).
+- See the README for more tips!
+
+Happy tasking!
+`
 }
 
 func main() {
@@ -32,21 +48,26 @@ func main() {
 	if err != nil {
 		styledErr := lipgloss.NewStyle().Foreground(cliError).Render("No .tada folder found in this or any parent directory.")
 		fmt.Fprintln(os.Stderr, styledErr)
-		os.Exit(1)
+		osExit(1)
 	}
 	store := NewFileStore(tadaDir)
+	cfg, _ := loadConfig()
 	var rootCmd = &cobra.Command{
 		Use:   "tada",
 		Short: "A terminal-based todo application",
 		Long:  "A terminal-based todo application\n\nTada is a simple yet powerful todo application with both CLI and TUI interfaces",
 		Run: func(cmd *cobra.Command, args []string) {
-			RunTUI()
+			RunTUIWithConfig(cfg)
 		},
 	}
 
-	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store), NewCompleteCmd(store), NewTuiCmd(store), NewEditCmd(store), NewDeleteCmd(store), NewShowCmd(store), NewMoveCmd(store), NewCopyCmd(store), NewBulkCmd(store), NewConfigCmd())
+	rootCmd.CompletionOptions.DisableDefaultCmd = false
+
+	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store, cfg), NewCompleteCmd(store), NewTuiCmd(store), NewEditCmd(store), NewDeleteCmd(store), NewShowCmd(store), NewMoveCmd(store), NewCopyCmd(store), NewBulkCmd(store), NewConfigCmd())
+
+	fmt.Fprintln(os.Stdout, onboardingMessage())
 
 	if err := fang.Execute(context.TODO(), rootCmd); err != nil {
-		os.Exit(1)
+		osExit(1)
 	}
 }

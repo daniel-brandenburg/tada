@@ -35,6 +35,7 @@ type model struct {
 	searchMode  bool
 	showDetails bool
 	toArchive   []*TaskWithPath // tasks to archive on exit
+	store       *FileStore      // injected for testability, optional
 }
 
 type item struct {
@@ -132,7 +133,10 @@ func (m model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Archive any completed tasks before quitting
 		if len(m.toArchive) > 0 {
 			for _, task := range m.toArchive {
-				store := NewFileStore()
+				store := m.store
+				if store == nil {
+					store = NewFileStore()
+				}
 				_ = store.CompleteTask(task.Topic, task.Task.Title)
 			}
 		}
@@ -847,4 +851,31 @@ func RunTUI() {
 		styledErr := lipgloss.NewStyle().Foreground(cliError).Render(fmt.Sprintf("Error: %v", err))
 		fmt.Fprintln(os.Stderr, styledErr)
 	}
+}
+
+func RunTUIWithConfig(cfg *Config) {
+	m := initialModel()
+	m.applyConfig(cfg)
+	p := tea.NewProgram(m)
+	if _, err := p.Run(); err != nil {
+		styledErr := lipgloss.NewStyle().Foreground(cliError).Render(fmt.Sprintf("Error: %v", err))
+		fmt.Fprintln(os.Stderr, styledErr)
+	}
+}
+
+func (m *model) applyConfig(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	// Example: apply theme (expand as needed)
+	if cfg.Theme == "dark" {
+		accent = lipgloss.Color("4")
+		muted = lipgloss.Color("8")
+		warning = lipgloss.Color("11")
+	} else if cfg.Theme == "light" {
+		accent = lipgloss.Color("12")
+		muted = lipgloss.Color("7")
+		warning = lipgloss.Color("11")
+	}
+	// Add more config-driven settings as needed
 }

@@ -42,7 +42,12 @@ func TestYankAndPaste(t *testing.T) {
 }
 
 func TestStatusCycle(t *testing.T) {
-	store := NewFileStore()
+	tempDir, err := os.MkdirTemp("", "tada-tui-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	store := NewFileStore(tempDir)
 	task := &TaskWithPath{Task: &Task{Title: "TestTask", Status: StatusTodo}}
 	_ = store.SaveTask("", task.Task)
 	// Find the file path actually used
@@ -143,7 +148,12 @@ func TestDetailsPopup(t *testing.T) {
 }
 
 func TestCompletedTaskVisibleUntilExit(t *testing.T) {
-	store := NewFileStore()
+	tempDir, err := os.MkdirTemp("", "tada-tui-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	store := NewFileStore(tempDir)
 	task := &TaskWithPath{Task: &Task{Title: "CompleteMe", Status: StatusTodo}}
 	_ = store.SaveTask("", task.Task)
 	// Find the file path actually used

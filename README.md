@@ -15,6 +15,8 @@ Tada is a simple yet powerful todo application with both CLI and TUI interfaces.
 - **Two Interfaces**:
   - Command-line interface (CLI) for quick operations
   - Terminal user interface (TUI) for interactive management
+- **Configurable**: Use `tada config` to view and set preferences
+- **Accessible**: Designed with accessibility and usability in mind
 
 ## Installation
 
@@ -100,6 +102,54 @@ tada tui
   - `a`: Add a new task
   - `r`: Refresh task list
   - `q`: Quit
+
+## Configuration
+
+Tada supports configuration via the `tada config` command. Config files are stored in your home directory and/or project `.tada` folder. You can view and set preferences such as default sort order, theme, and more:
+
+```bash
+tada config show
+tada config set theme dark
+tada config set defaultSort created
+```
+
+## Error Handling
+
+Tada provides user-friendly error messages for common issues, including:
+- Missing `.tada` directory (with onboarding guidance)
+- File permission errors
+- Corrupted or missing task files
+- Invalid commands or arguments
+
+## Output Formats
+
+You can list tasks in different formats:
+
+```bash
+tada list --format table   # Default
+tada list --format json
+tada list --format yaml
+```
+
+## Accessibility & Manual Testing
+
+Tada is tested for accessibility and usability. Manual testing tasks are tracked in `.tada/tasks/ManualTesting/` and cover:
+- TUI color, alignment, and navigation
+- Error handling and data integrity
+- Accessibility (contrast, screen readers)
+- Platform compatibility
+- Bulk operations, config, onboarding, and more
+
+## Testing
+
+To run all tests and check coverage:
+
+```bash
+go test -v ./...
+go test -cover ./...
+```
+
+High test coverage is maintained for all critical paths, error handling, and output formats. See `.tada/tasks/ManualTesting/` for manual test scenarios.
 
 ## Task Storage
 

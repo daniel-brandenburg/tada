@@ -234,7 +234,8 @@ func TestListCmd(t *testing.T) {
 			}
 
 			// Execute the command function
-			listCmd := NewListCmd(store)
+			cfg := &Config{DefaultSort: "created", Theme: "dark"} // Provide a default config for test
+			listCmd := NewListCmd(store, cfg)
 			listCmd.SetArgs(tc.args)
 			for k, v := range tc.flags {
 				listCmd.Flags().Set(k, v)

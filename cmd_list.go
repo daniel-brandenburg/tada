@@ -23,9 +23,13 @@ var (
 	cliMuted     = lipgloss.Color("8")  // gray
 )
 
-func NewListCmd(store *FileStore) *cobra.Command {
+func NewListCmd(store *FileStore, cfg *Config) *cobra.Command {
 	var outputFormat string
 	var fuzzyFlag bool
+	var defaultSort = "created"
+	if cfg != nil && cfg.DefaultSort != "" {
+		defaultSort = cfg.DefaultSort
+	}
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List tasks",
@@ -85,6 +89,9 @@ func NewListCmd(store *FileStore) *cobra.Command {
 
 			// Sort tasks
 			sortBy, _ := cmd.Flags().GetString("sort")
+			if sortBy == "" {
+				sortBy = defaultSort
+			}
 			for path := range tasks {
 				sortTasks(tasks[path], sortBy)
 			}
@@ -167,7 +174,7 @@ func NewListCmd(store *FileStore) *cobra.Command {
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "Output format: json, yaml, or pretty (default)")
 	cmd.Flags().BoolVar(&fuzzyFlag, "fuzzy", false, "Enable fuzzy search for --search")
 	cmd.Flags().StringP("status", "s", "", "Filter by status (todo, in-progress, done, cancelled, paused)")
-	cmd.Flags().String("sort", "created", "Sort by: created, priority, title, status")
+	cmd.Flags().String("sort", defaultSort, "Sort by: created, priority, title, status")
 	cmd.Flags().Bool("simple", false, "Print simple output (id, title, status)")
 	cmd.Flags().StringP("search", "q", "", "Search for tasks by title, description, tags, or topic")
 	return cmd

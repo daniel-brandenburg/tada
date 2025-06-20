@@ -65,8 +65,6 @@ func main() {
 
 	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store, cfg), NewCompleteCmd(store), NewTuiCmd(store), NewEditCmd(store), NewDeleteCmd(store), NewShowCmd(store), NewMoveCmd(store), NewCopyCmd(store), NewBulkCmd(store), NewConfigCmd())
 
-	fmt.Fprintln(os.Stdout, onboardingMessage())
-
 	if err := fang.Execute(context.TODO(), rootCmd); err != nil {
 		osExit(1)
 	}

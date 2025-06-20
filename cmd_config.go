@@ -16,6 +16,7 @@ type Config struct {
 	Theme         string   `yaml:"theme"`
 	DefaultStatus string   `yaml:"default_status"`
 	Tags          []string `yaml:"tags"`
+	ShowWelcome   *bool    `yaml:"show_welcome,omitempty"`
 }
 
 func getConfigPaths() (global, local string) {
@@ -88,6 +89,17 @@ func NewConfigCmd() *cobra.Command {
 				cfg.DefaultStatus = value
 			case "tags":
 				cfg.Tags = strings.Split(value, ",")
+			case "show_welcome":
+				if value == "true" {
+					b := true
+					cfg.ShowWelcome = &b
+				} else if value == "false" {
+					b := false
+					cfg.ShowWelcome = &b
+				} else {
+					fmt.Fprintln(cmd.ErrOrStderr(), lipgloss.NewStyle().Foreground(cliError).Render("show_welcome must be true or false."))
+					return
+				}
 			default:
 				fmt.Fprintln(cmd.ErrOrStderr(), lipgloss.NewStyle().Foreground(cliError).Render("Unknown config key."))
 				return

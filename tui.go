@@ -30,12 +30,14 @@ type model struct {
 	err      error
 	height   int // track terminal height
 	// QoL features
-	yankedTask  *TaskWithPath
-	searchQuery string
-	searchMode  bool
-	showDetails bool
-	toArchive   []*TaskWithPath // tasks to archive on exit
-	store       *FileStore      // injected for testability, optional
+	yankedTask    *TaskWithPath
+	searchQuery   string
+	searchMode    bool
+	showDetails   bool
+	toArchive     []*TaskWithPath // tasks to archive on exit
+	store         *FileStore      // injected for testability, optional
+	confirmDelete bool            // show confirm dialog
+	pendingDelete *TaskWithPath   // task to delete if confirmed
 }
 
 type item struct {
@@ -128,6 +130,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.confirmDelete {
+		switch msg.String() {
+		case "y":
+			if m.pendingDelete != nil {
+				_ = os.Remove(m.pendingDelete.FilePath)
+			}
+			m.confirmDelete = false
+			m.pendingDelete = nil
+			return m, loadTasks
+		case "n", "esc":
+			m.confirmDelete = false
+			m.pendingDelete = nil
+			return m, nil
+		default:
+			return m, nil
+		}
+	}
+
 	switch msg.String() {
 	case "ctrl+c", "q":
 		// Archive any completed tasks before quitting
@@ -184,10 +204,9 @@ func (m model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "d":
 		if m.selected < len(m.items) && m.items[m.selected].task != nil {
-			// For simplicity, delete immediately (could add confirmation)
-			task := m.items[m.selected].task
-			_ = os.Remove(task.FilePath)
-			return m, loadTasks
+			m.confirmDelete = true
+			m.pendingDelete = m.items[m.selected].task
+			return m, nil
 		}
 	case "e":
 		if m.selected < len(m.items) && m.items[m.selected].task != nil {
@@ -658,7 +677,13 @@ func (m model) View() string {
 
 func (m model) viewList() string {
 	s := "TADA - Todo Manager\n"
-	s += mutedStyle.Render("j/k: move • space: expand • enter: edit • a: add • r: refresh • q: quit") + "\n\n"
+	s += mutedStyle.Render("j/k: move • space: expand • enter: edit • a: add • r: refresh • d: delete • q: quit") + "\n\n"
+
+	if m.confirmDelete && m.pendingDelete != nil {
+		msg := focusStyle.Render("Delete task '") + m.pendingDelete.Task.Title + focusStyle.Render("'? (y/n)")
+		popup := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(warning).Background(lipgloss.Color("0")).Padding(1, 2).Width(50).Align(lipgloss.Left).Render(msg)
+		return s + popup + "\n"
+	}
 
 	if len(m.items) == 0 {
 		return s + mutedStyle.Render("No tasks found. Press 'a' to add a task.")
@@ -878,4 +903,18 @@ func (m *model) applyConfig(cfg *Config) {
 		warning = lipgloss.Color("11")
 	}
 	// Add more config-driven settings as needed
+}
+
+func showWelcomeIfNeeded(cfg *Config, tadaDir string) {
+	// Check config: if ShowWelcome is set to false, skip
+	if cfg != nil && cfg.ShowWelcome != nil && !*cfg.ShowWelcome {
+		return
+	}
+	flagPath := filepath.Join(tadaDir, ".welcome_shown")
+	if _, err := os.Stat(flagPath); err == nil {
+		return // already shown for this project
+	}
+	fmt.Println(onboardingMessage())
+	// Mark as shown
+	_ = os.WriteFile(flagPath, []byte("shown\n"), 0644)
 }

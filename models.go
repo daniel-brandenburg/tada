@@ -29,3 +29,8 @@ type TaskWithPath struct {
 	FilePath string
 	Topic    string
 }
+
+// Storage is a minimal interface for testable task storage.
+type Storage interface {
+	LoadAllTasks() (map[string][]*TaskWithPath, error)
+}

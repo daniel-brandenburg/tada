@@ -67,7 +67,7 @@ func main() {
 
 	rootCmd.CompletionOptions.DisableDefaultCmd = false
 
-	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store, cfg), NewCompleteCmd(store), NewTuiCmd(store), NewEditCmd(store), NewDeleteCmd(store), NewShowCmd(store), NewMoveCmd(store), NewCopyCmd(store), NewBulkCmd(store), NewConfigCmd(), NewVersionCmd())
+	rootCmd.AddCommand(NewAddCmd(store), NewListCmd(store, cfg), NewCompleteCmd(store), NewTuiCmd(store), NewEditCmd(store), NewDeleteCmd(store), NewShowCmd(store), NewMoveCmd(store), NewCopyCmd(store), NewBulkCmd(store), NewConfigCmd(), NewVersionCmd(), NewExportCmd(store))
 
 	if err := fang.Execute(context.TODO(), rootCmd); err != nil {
 		osExit(1)
